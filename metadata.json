@@ -1,0 +1,8 @@
+{
+  "name": "Óticas Filipe — Página Oficial",
+  "description": "Landing page comercial oficial da Óticas Filipe com catálogo de categorias, lentes, diferenciais da rede, 15 unidades e formulário de agendamento de avaliação visual gratuita.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  --brand-yellow: #F5B800;
+  --brand-yellow-hover: #E5A800;
+  --brand-yellow-light: #FEF9E7;
+  --brand-black: #111111;
+  --brand-dark: #18181B;
+  --brand-white: #FFFFFF;
+  --brand-gray: #71717A;
+  --brand-surface-hero: #f8f8f8;
+  --brand-surface-form: #fcfcfc;
+  --brand-surface-light: #f0f3f5;
+  --brand-border: #e5e5e5;
+  --color-destructive: #ef4444;
+  --color-success: #22c55e;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--brand-black);
+  background-color: var(--brand-white);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn-filipe-cta {
+  background-color: var(--brand-yellow);
+  color: var(--brand-black);
+  border-radius: 100px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0px;
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 3px 10px rgba(245, 184, 0, 0.35);
+}
+
+.btn-filipe-cta:hover {
+  background-color: var(--brand-yellow-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(229, 168, 0, 0.42);
+}
+
+.btn-filipe-cta:active {
+  transform: translateY(0);
+}
+
+.btn-filipe-cta-dark {
+  background-color: var(--brand-black);
+  color: var(--brand-yellow);
+  border-radius: 100px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0px;
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 3px 10px rgba(17, 17, 17, 0.28);
+}
+
+.btn-filipe-cta-dark:hover {
+  background-color: var(--brand-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(17, 17, 17, 0.38);
+}
+
+.btn-filipe-cta-dark:active {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .btn-filipe-cta,
+  .btn-filipe-cta-dark {
+    transition: none;
+  }
+}

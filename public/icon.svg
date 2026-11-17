@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <rect width="512" height="512" rx="112" fill="#F5B800"/>
+  <!-- Eyeglasses frame emblem -->
+  <g fill="none" stroke="#111111" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left lens -->
+    <circle cx="168" cy="256" r="76" />
+    <!-- Right lens -->
+    <circle cx="344" cy="256" r="76" />
+    <!-- Bridge connecting lenses -->
+    <path d="M 244 238 C 252 230, 260 230, 268 238" />
+    <!-- Left temple bar -->
+    <path d="M 92 246 L 56 242" />
+    <!-- Right temple bar -->
+    <path d="M 420 246 L 456 242" />
+    <!-- Lens glare highlight subtle -->
+    <path d="M 140 220 A 48 48 0 0 1 180 200" stroke="#FFFFFF" stroke-width="14" opacity="0.85" />
+    <path d="M 316 220 A 48 48 0 0 1 356 200" stroke="#FFFFFF" stroke-width="14" opacity="0.85" />
+  </g>
+  <!-- Brand text mark -->
+  <text x="256" y="388" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="800" font-size="34" letter-spacing="4" fill="#111111" text-anchor="middle">
+    ÓTICAS FILIPE
+  </text>
+</svg>
