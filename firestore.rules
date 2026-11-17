@@ -1,0 +1,209 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && (
+          request.auth.token.email == 'gabrielsommer00@gmail.com'
+          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+
+    function isPendingVoucherUnit(unitId) {
+      return unitId in [
+        'filipe-05-tiradentes',
+        'filipe-06-guaianases',
+        'filipe-07-sao-mateus',
+        'filipe-08-jardim-santo-andre',
+        'filipe-09-rodolfo-pirani'
+      ];
+    }
+
+    function isValidRoutingState(data) {
+      return (
+        !isPendingVoucherUnit(data.unitId)
+        && data.routingStatus == 'ENCAMINHADO_WHATSAPP'
+        && data.routingStatusLabel == 'Encaminhado ao WhatsApp'
+        && data.destinationWhatsapp is string
+        && data.destinationWhatsapp.size() >= 12
+        && data.destinationWhatsapp.size() <= 15
+        && data.destinationWhatsapp.matches('^55[0-9]{10,11}$')
+      ) || (
+        isPendingVoucherUnit(data.unitId)
+        && data.routingStatus == 'PENDENTE_DE_CONTATO'
+        && data.routingStatusLabel == 'PENDENTE DE CONTATO'
+        && data.destinationWhatsapp is string
+        && data.destinationWhatsapp == ''
+      );
+    }
+
+    function isValidVoucherRegistration(data) {
+      return data.keys().hasAll([
+          'unitId',
+          'unitCode',
+          'unidade',
+          'nomeCompleto',
+          'email',
+          'celularWhatsapp',
+          'destinationWhatsapp',
+          'routingStatus',
+          'routingStatusLabel',
+          'submittedDate',
+          'submittedTime',
+          'submittedAtIso',
+          'createdAt',
+          'origin',
+          'pageUrl',
+          'leadId',
+          'utmSource',
+          'utmCampaign',
+          'utmMedium',
+          'utmContent',
+          'utmTerm',
+          'utmAdset',
+          'gclid',
+          'fbclid',
+          'canal',
+          'programa',
+          'webhookDispatched'
+        ])
+        && data.keys().hasOnly([
+          'unitId',
+          'unitCode',
+          'unidade',
+          'nomeCompleto',
+          'email',
+          'celularWhatsapp',
+          'destinationWhatsapp',
+          'routingStatus',
+          'routingStatusLabel',
+          'submittedDate',
+          'submittedTime',
+          'submittedAtIso',
+          'createdAt',
+          'origin',
+          'pageUrl',
+          'leadId',
+          'utmSource',
+          'utmCampaign',
+          'utmMedium',
+          'utmContent',
+          'utmTerm',
+          'utmAdset',
+          'gclid',
+          'fbclid',
+          'canal',
+          'programa',
+          'webhookDispatched'
+        ])
+        && data.unitId is string
+        && data.unitId.size() >= 5
+        && data.unitId.size() <= 64
+        && data.unitId.matches('^filipe-[0-9]{2}-[a-z0-9-]+$')
+        && data.unitCode is string
+        && data.unitCode.size() >= 9
+        && data.unitCode.size() <= 16
+        && data.unitCode.matches('^FILIPE-[0-9]{2}$')
+        && data.unidade is string
+        && data.unidade.size() >= 5
+        && data.unidade.size() <= 120
+        && data.nomeCompleto is string
+        && data.nomeCompleto.size() >= 3
+        && data.nomeCompleto.size() <= 160
+        && data.email is string
+        && data.email.size() >= 5
+        && data.email.size() <= 160
+        && data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$')
+        && data.celularWhatsapp is string
+        && data.celularWhatsapp.size() >= 10
+        && data.celularWhatsapp.size() <= 32
+        && data.submittedDate is string
+        && data.submittedDate.size() >= 8
+        && data.submittedDate.size() <= 20
+        && data.submittedTime is string
+        && data.submittedTime.size() >= 5
+        && data.submittedTime.size() <= 20
+        && data.submittedAtIso is string
+        && data.submittedAtIso.size() >= 10
+        && data.submittedAtIso.size() <= 40
+        && data.createdAt is timestamp
+        && data.origin is string
+        && data.origin.size() >= 3
+        && data.origin.size() <= 64
+        && data.pageUrl is string
+        && data.pageUrl.size() <= 500
+        && data.leadId is string
+        && data.leadId.size() <= 100
+        && data.utmSource is string
+        && data.utmSource.size() <= 120
+        && data.utmCampaign is string
+        && data.utmCampaign.size() <= 120
+        && data.utmMedium is string
+        && data.utmMedium.size() <= 120
+        && data.utmContent is string
+        && data.utmContent.size() <= 120
+        && data.utmTerm is string
+        && data.utmTerm.size() <= 120
+        && data.utmAdset is string
+        && data.utmAdset.size() <= 120
+        && data.gclid is string
+        && data.gclid.size() <= 200
+        && data.fbclid is string
+        && data.fbclid.size() <= 200
+        && data.canal is string
+        && data.canal.size() <= 100
+        && data.programa is string
+        && data.programa.size() <= 100
+        && data.webhookDispatched is bool
+        && isValidRoutingState(data);
+    }
+
+    match /voucher_registrations/{registrationId} {
+      // Public customers submit validated voucher leads; PII reads and admin actions are restricted to verified admins.
+      allow get: if isAdmin() && isValidId(registrationId);
+      allow list: if isAdmin();
+      allow create: if isValidId(registrationId)
+        && isValidVoucherRegistration(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(registrationId)
+        && isValidVoucherRegistration(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().unitId == existing().unitId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['routingStatus', 'routingStatusLabel', 'destinationWhatsapp', 'webhookDispatched']);
+      allow delete: if isAdmin() && isValidId(registrationId);
+    }
+
+    match /admins/{adminId} {
+      allow get: if isSignedIn()
+        && isValidId(adminId)
+        && request.auth.token.email_verified == true
+        && (request.auth.uid == adminId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+  }
+}

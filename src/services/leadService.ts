@@ -1,3 +1,26 @@
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import type { StoreUnit } from '../data/landingData';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  buildVoucherWhatsAppMessage,
+  buildVoucherWhatsAppUrl,
+  formatBrazilianDateTimeParts,
+  resolveVoucherDestination,
+  sanitizeBoundedString,
+  type VoucherRoutingStatusCode,
+  type VoucherRoutingStatusLabel,
+} from './voucherRouting';
+
+export {
+  buildVoucherWhatsAppMessage,
+  buildVoucherWhatsAppUrl,
+  formatBrazilianDateTimeParts,
+  resolveVoucherDestination,
+  sanitizeBoundedString,
+  type VoucherRoutingStatusCode,
+  type VoucherRoutingStatusLabel,
+};
+
 export interface LeadTrackingFields {
   utm_source: string;
   utm_campaign: string;
@@ -16,6 +39,7 @@ export interface LeadTrackingFields {
 }
 
 export interface LeadPayload {
+  unitId: string;
   unidade: string;
   nomeCompleto: string;
   celularWhatsapp: string;
@@ -25,15 +49,60 @@ export interface LeadPayload {
   pageUrl: string;
 }
 
+export interface VoucherRegistrationRecord {
+  unitId: string;
+  unitCode: string;
+  unidade: string;
+  nomeCompleto: string;
+  email: string;
+  celularWhatsapp: string;
+  destinationWhatsapp: string;
+  routingStatus: VoucherRoutingStatusCode;
+  routingStatusLabel: VoucherRoutingStatusLabel;
+  submittedDate: string;
+  submittedTime: string;
+  submittedAtIso: string;
+  origin: string;
+  pageUrl: string;
+  leadId: string;
+  utmSource: string;
+  utmCampaign: string;
+  utmMedium: string;
+  utmContent: string;
+  utmTerm: string;
+  utmAdset: string;
+  gclid: string;
+  fbclid: string;
+  canal: string;
+  programa: string;
+  webhookDispatched: boolean;
+}
+
 export type LeadSubmissionResult =
   | {
-      status: 'sent';
+      status: 'routed';
+      registrationId: string;
+      unit: StoreUnit;
+      destinationWhatsapp: string;
+      whatsappUrl: string;
+      whatsappMessage: string;
+      routingStatus: 'ENCAMINHADO_WHATSAPP';
+      routingStatusLabel: 'Encaminhado ao WhatsApp';
+      submittedDate: string;
+      submittedTime: string;
       message: string;
-      endpoint: string;
       payload: LeadPayload;
     }
   | {
-      status: 'unconfigured';
+      status: 'pending_contact';
+      registrationId: string;
+      unit: StoreUnit;
+      destinationWhatsapp: null;
+      whatsappUrl: null;
+      routingStatus: 'PENDENTE_DE_CONTATO';
+      routingStatusLabel: 'PENDENTE DE CONTATO';
+      submittedDate: string;
+      submittedTime: string;
       message: string;
       payload: LeadPayload;
     }
@@ -67,6 +136,14 @@ function getOrCreateLeadId(): string {
   } catch {
     return `lead_${Date.now()}`;
   }
+}
+
+export function generateRegistrationId(): string {
+  const raw =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `vch_${raw.replace(/[^a-zA-Z0-9_-]/g, '')}`.slice(0, 128);
 }
 
 export function collectTrackingFields(): LeadTrackingFields {
@@ -153,23 +230,17 @@ export function isValidFullName(name: string): boolean {
 }
 
 export function getConfiguredWebhookUrl(): string {
-  return (import.meta.env.VITE_LEAD_WEBHOOK_URL as string | undefined)?.trim() || '';
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  return env?.VITE_LEAD_WEBHOOK_URL?.trim() || '';
 }
 
-export async function dispatchLeadSubmission(
-  payload: LeadPayload
-): Promise<LeadSubmissionResult> {
-  const endpoint = getConfiguredWebhookUrl();
-
-  if (!endpoint) {
-    return {
-      status: 'unconfigured',
-      message:
-        'Integração externa pendente: os dados e parâmetros de rastreamento foram validados, mas nenhum endpoint real de destino (VITE_LEAD_WEBHOOK_URL) está configurado neste ambiente. Nenhum envio foi simulado.',
-      payload,
-    };
-  }
-
+async function tryDispatchOptionalWebhook(
+  endpoint: string,
+  webhookBody: Record<string, unknown>
+): Promise<boolean> {
+  if (!endpoint) return false;
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), 3500);
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -177,30 +248,163 @@ export async function dispatchLeadSubmission(
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(webhookBody),
+      signal: controller.signal,
     });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
 
-    if (!response.ok) {
-      return {
-        status: 'error',
-        message: `O servidor de destino respondeu com status ${response.status}. Verifique o endpoint configurado e tente novamente.`,
-        payload,
-      };
-    }
-
-    return {
-      status: 'sent',
-      message:
-        'Solicitação enviada com sucesso! Nossa equipe na unidade escolhida entrará em contato para confirmar o seu atendimento.',
-      endpoint,
-      payload,
-    };
+export async function dispatchLeadSubmission(
+  payload: LeadPayload,
+  options?: { registrationId?: string }
+): Promise<LeadSubmissionResult> {
+  let resolved;
+  try {
+    resolved = resolveVoucherDestination(payload.unitId);
   } catch (err) {
-    const detail = err instanceof Error ? err.message : 'Erro de conexão';
     return {
       status: 'error',
-      message: `Não foi possível enviar os dados ao endpoint configurado (${detail}).`,
+      message:
+        err instanceof Error
+          ? err.message
+          : 'Unidade selecionada inválida. Escolha uma de nossas 15 unidades.',
       payload,
     };
   }
+
+  const registrationId =
+    options?.registrationId && /^[a-zA-Z0-9_-]{1,128}$/.test(options.registrationId)
+      ? options.registrationId
+      : generateRegistrationId();
+
+  const { submittedDate, submittedTime, submittedAtIso } =
+    formatBrazilianDateTimeParts(new Date(payload.submittedAt || Date.now()));
+
+  const normalizedPayload: LeadPayload = {
+    ...payload,
+    unitId: resolved.unit.id,
+    unidade: resolved.unit.name,
+    nomeCompleto: sanitizeBoundedString(
+      payload.nomeCompleto.replace(/\s+/g, ' '),
+      160
+    ),
+    email: sanitizeBoundedString(payload.email, 160),
+    celularWhatsapp: sanitizeBoundedString(payload.celularWhatsapp, 32),
+    submittedAt: submittedAtIso,
+  };
+
+  const endpoint = getConfiguredWebhookUrl();
+  const webhookDispatched = await tryDispatchOptionalWebhook(endpoint, {
+    ...normalizedPayload,
+    registrationId,
+    unitCode: resolved.unit.unitCode,
+    destinationWhatsapp: resolved.destinationWhatsapp,
+    routingStatus: resolved.routingStatus,
+    routingStatusLabel: resolved.routingStatusLabel,
+    submittedDate,
+    submittedTime,
+    origin: 'Campanha de Voucher',
+  });
+
+  const firestoreRecord: VoucherRegistrationRecord = {
+    unitId: resolved.unit.id,
+    unitCode: resolved.unit.unitCode,
+    unidade: sanitizeBoundedString(resolved.unit.name, 120),
+    nomeCompleto: normalizedPayload.nomeCompleto,
+    email: normalizedPayload.email,
+    celularWhatsapp: normalizedPayload.celularWhatsapp,
+    destinationWhatsapp: resolved.destinationWhatsapp ?? '',
+    routingStatus: resolved.routingStatus,
+    routingStatusLabel: resolved.routingStatusLabel,
+    submittedDate: sanitizeBoundedString(submittedDate, 20),
+    submittedTime: sanitizeBoundedString(submittedTime, 20),
+    submittedAtIso: sanitizeBoundedString(submittedAtIso, 40),
+    origin: 'Campanha de Voucher',
+    pageUrl: sanitizeBoundedString(normalizedPayload.pageUrl || '', 500),
+    leadId: sanitizeBoundedString(normalizedPayload.tracking.lead_id || '', 100),
+    utmSource: sanitizeBoundedString(normalizedPayload.tracking.utm_source || '', 120),
+    utmCampaign: sanitizeBoundedString(
+      normalizedPayload.tracking.utm_campaign || '',
+      120
+    ),
+    utmMedium: sanitizeBoundedString(normalizedPayload.tracking.utm_medium || '', 120),
+    utmContent: sanitizeBoundedString(
+      normalizedPayload.tracking.utm_content || '',
+      120
+    ),
+    utmTerm: sanitizeBoundedString(normalizedPayload.tracking.utm_term || '', 120),
+    utmAdset: sanitizeBoundedString(normalizedPayload.tracking.utm_adset || '', 120),
+    gclid: sanitizeBoundedString(normalizedPayload.tracking.gclid || '', 200),
+    fbclid: sanitizeBoundedString(normalizedPayload.tracking.fbclid || '', 200),
+    canal: sanitizeBoundedString(normalizedPayload.tracking.Canal || '', 100),
+    programa: sanitizeBoundedString(normalizedPayload.tracking.Programa || '', 100),
+    webhookDispatched,
+  };
+
+  const docPath = `voucher_registrations/${registrationId}`;
+  try {
+    await setDoc(doc(db, 'voucher_registrations', registrationId), {
+      ...firestoreRecord,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    try {
+      handleFirestoreError(error, OperationType.CREATE, docPath);
+    } catch {
+      return {
+        status: 'error',
+        message:
+          'Não foi possível registrar o seu cadastro no banco de dados neste momento. Nenhum encaminhamento foi iniciado. Por favor, tente novamente.',
+        payload: normalizedPayload,
+      };
+    }
+  }
+
+  if (resolved.isRoutable && resolved.destinationWhatsapp) {
+    const messageFields = {
+      nomeCompleto: normalizedPayload.nomeCompleto,
+      email: normalizedPayload.email,
+      celularWhatsapp: normalizedPayload.celularWhatsapp,
+      unidade: resolved.unit.name,
+    };
+    const whatsappMessage = buildVoucherWhatsAppMessage(messageFields);
+    const whatsappUrl = buildVoucherWhatsAppUrl(
+      resolved.destinationWhatsapp,
+      messageFields
+    );
+
+    return {
+      status: 'routed',
+      registrationId,
+      unit: resolved.unit,
+      destinationWhatsapp: resolved.destinationWhatsapp,
+      whatsappUrl,
+      whatsappMessage,
+      routingStatus: 'ENCAMINHADO_WHATSAPP',
+      routingStatusLabel: 'Encaminhado ao WhatsApp',
+      submittedDate,
+      submittedTime,
+      message: `Cadastro registrado para ${resolved.unit.name}! O WhatsApp da unidade foi preparado com sua mensagem preenchida para você confirmar o envio.`,
+      payload: normalizedPayload,
+    };
+  }
+
+  return {
+    status: 'pending_contact',
+    registrationId,
+    unit: resolved.unit,
+    destinationWhatsapp: null,
+    whatsappUrl: null,
+    routingStatus: 'PENDENTE_DE_CONTATO',
+    routingStatusLabel: 'PENDENTE DE CONTATO',
+    submittedDate,
+    submittedTime,
+    message: `Cadastro recebido e registrado para ${resolved.unit.name}! Esta unidade está com o encaminhamento direto via WhatsApp em validação cadastral (status: PENDENTE DE CONTATO). Nossa equipe direcionará seu atendimento.`,
+    payload: normalizedPayload,
+  };
 }

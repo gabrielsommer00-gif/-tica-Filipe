@@ -1,10 +1,17 @@
-import { AlertCircle, CheckCircle2, ChevronDown, Info } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ExternalLink,
+  Info,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BRAND_ASSETS, OFFICIAL_STORES } from '../data/landingData';
 import {
   collectTrackingFields,
   dispatchLeadSubmission,
   formatBrazilianPhone,
+  generateRegistrationId,
   isValidBrazilianPhone,
   isValidEmail,
   isValidFullName,
@@ -22,12 +29,24 @@ interface VoucherFormSectionProps {
   selectedStore?: string;
 }
 
+function openWhatsAppInNewTab(url: string) {
+  if (typeof document === 'undefined') return;
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+}
+
 export function VoucherFormSection({
   selectedStore = '',
 }: VoucherFormSectionProps) {
   const tracking = useMemo(() => collectTrackingFields(), []);
 
-  const [unidade, setUnidade] = useState(selectedStore);
+  const [unitId, setUnitId] = useState(selectedStore);
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [celularWhatsapp, setCelularWhatsapp] = useState('');
   const [email, setEmail] = useState('');
@@ -36,16 +55,31 @@ export function VoucherFormSection({
   const [result, setResult] = useState<LeadSubmissionResult | null>(null);
   const [showPayloadDetails, setShowPayloadDetails] = useState(false);
 
+  const submissionLockRef = useRef(false);
+  const lastSubmittedRef = useRef<{
+    fingerprint: string;
+    result: LeadSubmissionResult;
+  } | null>(null);
+
   useEffect(() => {
-    if (selectedStore) {
-      setUnidade(selectedStore);
+    if (!selectedStore) return;
+    const matchedById = OFFICIAL_STORES.find(
+      (store) => store.id === selectedStore || store.name === selectedStore
+    );
+    if (matchedById) {
+      setUnitId(matchedById.id);
       setErrors((prev) => ({ ...prev, unidade: undefined }));
     }
   }, [selectedStore]);
 
+  const selectedStoreObj = useMemo(
+    () => OFFICIAL_STORES.find((store) => store.id === unitId) ?? null,
+    [unitId]
+  );
+
   const validate = (): FormErrors => {
     const nextErrors: FormErrors = {};
-    if (!unidade) {
+    if (!unitId || !selectedStoreObj) {
       nextErrors.unidade = 'Selecione uma de nossas 15 unidades.';
     }
     if (!isValidFullName(nomeCompleto)) {
@@ -70,28 +104,66 @@ export function VoucherFormSection({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const validationErrors = validate();
-    setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) {
+    if (submissionLockRef.current) {
       return;
     }
 
+    const validationErrors = validate();
+    setErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0 || !selectedStoreObj) {
+      return;
+    }
+
+    const cleanName = nomeCompleto.trim().replace(/\s+/g, ' ');
+    const cleanEmail = email.trim();
+    const fingerprint = `${selectedStoreObj.id}|${cleanName.toLowerCase()}|${celularWhatsapp}|${cleanEmail.toLowerCase()}`;
+
+    if (
+      lastSubmittedRef.current &&
+      lastSubmittedRef.current.fingerprint === fingerprint
+    ) {
+      const previousResult = lastSubmittedRef.current.result;
+      setResult(previousResult);
+      if (previousResult.status === 'routed' && previousResult.whatsappUrl) {
+        openWhatsAppInNewTab(previousResult.whatsappUrl);
+      }
+      return;
+    }
+
+    submissionLockRef.current = true;
     setIsSubmitting(true);
     setResult(null);
 
-    const payload = {
-      unidade,
-      nomeCompleto: nomeCompleto.trim().replace(/\s+/g, ' '),
-      celularWhatsapp,
-      email: email.trim(),
-      tracking,
-      submittedAt: new Date().toISOString(),
-      pageUrl: typeof window !== 'undefined' ? window.location.href : '',
-    };
+    try {
+      const payload = {
+        unitId: selectedStoreObj.id,
+        unidade: selectedStoreObj.name,
+        nomeCompleto: cleanName,
+        celularWhatsapp,
+        email: cleanEmail,
+        tracking,
+        submittedAt: new Date().toISOString(),
+        pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+      };
 
-    const response = await dispatchLeadSubmission(payload);
-    setResult(response);
-    setIsSubmitting(false);
+      const registrationId = generateRegistrationId();
+      const response = await dispatchLeadSubmission(payload, { registrationId });
+      setResult(response);
+
+      if (response.status === 'routed' || response.status === 'pending_contact') {
+        lastSubmittedRef.current = {
+          fingerprint,
+          result: response,
+        };
+      }
+
+      if (response.status === 'routed' && response.whatsappUrl) {
+        openWhatsAppInNewTab(response.whatsappUrl);
+      }
+    } finally {
+      submissionLockRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   const inputBaseClass =
@@ -145,23 +217,23 @@ export function VoucherFormSection({
                 <select
                   id="unidade-select"
                   name="escolha-uma-de-nossas-unidades"
-                  value={unidade}
+                  value={unitId}
                   onChange={(e) => {
-                    setUnidade(e.target.value);
+                    setUnitId(e.target.value);
                     if (errors.unidade) {
                       setErrors((prev) => ({ ...prev, unidade: undefined }));
                     }
                   }}
                   aria-invalid={Boolean(errors.unidade)}
                   className={`${inputBaseClass} appearance-none pr-10 cursor-pointer ${
-                    !unidade ? 'text-[#111111]/65' : 'text-[#111111]'
+                    !unitId ? 'text-[#111111]/65' : 'text-[#111111]'
                   } ${errors.unidade ? 'border-[#ef4444]' : 'border-[#111111]'}`}
                 >
                   <option value="" disabled>
                     * Escolha uma de nossas unidades
                   </option>
                   {OFFICIAL_STORES.map((store) => (
-                    <option key={store.id} value={store.name}>
+                    <option key={store.id} value={store.id}>
                       {store.name}
                     </option>
                   ))}
@@ -308,7 +380,7 @@ export function VoucherFormSection({
               disabled={isSubmitting}
               className="btn-filipe-cta mt-2 w-full h-[48px] cursor-pointer disabled:opacity-65 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Enviando...' : 'RETIRAR MEU VOUCHER'}
+              {isSubmitting ? 'Registrando...' : 'RETIRAR MEU VOUCHER'}
             </button>
           </form>
 
@@ -318,55 +390,71 @@ export function VoucherFormSection({
               role="status"
               aria-live="polite"
               className={`mt-4 w-full max-w-[390px] rounded-2xl border p-4 text-left text-[13px] leading-[1.45] ${
-                result.status === 'sent'
+                result.status === 'routed'
                   ? 'bg-[#f0fdf4] border-[#22c55e] text-[#14532d]'
-                  : result.status === 'unconfigured'
+                  : result.status === 'pending_contact'
                   ? 'bg-[#FEF9E7] border-[#F5B800] text-[#111111]'
                   : 'bg-[#fef2f2] border-[#ef4444] text-[#7f1d1d]'
               }`}
             >
               <div className="flex items-start gap-2.5">
-                {result.status === 'sent' ? (
+                {result.status === 'routed' ? (
                   <CheckCircle2 className="w-5 h-5 text-[#16a34a] shrink-0 mt-0.5" />
-                ) : result.status === 'unconfigured' ? (
+                ) : result.status === 'pending_contact' ? (
                   <Info className="w-5 h-5 text-[#E5A800] shrink-0 mt-0.5" />
                 ) : (
                   <AlertCircle className="w-5 h-5 text-[#ef4444] shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold">
-                    {result.status === 'sent'
-                      ? 'Solicitação recebida'
-                      : result.status === 'unconfigured'
-                      ? 'Configuração externa de destino necessária'
-                      : 'Falha no envio'}
+                    {result.status === 'routed'
+                      ? 'Cadastro registrado — confirme no WhatsApp'
+                      : result.status === 'pending_contact'
+                      ? 'Cadastro recebido — PENDENTE DE CONTATO'
+                      : 'Falha no registro'}
                   </p>
                   <p className="mt-1">{result.message}</p>
 
-                  {result.status === 'unconfigured' && (
-                    <p className="mt-2 text-[12px]">
-                      Configure a variável de ambiente{' '}
-                      <code className="bg-black/10 px-1 py-0.5 rounded font-mono">
-                        VITE_LEAD_WEBHOOK_URL
-                      </code>{' '}
-                      apontando para a URL do seu webhook/CRM para habilitar o
-                      envio real dos leads.
-                    </p>
+                  {result.status === 'routed' && result.whatsappUrl && (
+                    <a
+                      href={result.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center justify-center gap-1.5 w-full h-10 px-4 rounded-[100px] bg-[#16a34a] hover:bg-[#15803d] text-white font-bold text-[13px] transition-colors"
+                    >
+                      <span>Abrir WhatsApp da unidade</span>
+                      <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                    </a>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setShowPayloadDetails((prev) => !prev)}
-                    className="mt-2 text-[12px] font-semibold underline cursor-pointer"
+                    className="mt-2.5 text-[12px] font-semibold underline cursor-pointer"
                   >
                     {showPayloadDetails
-                      ? 'Ocultar dados capturados'
-                      : 'Ver dados e rastreamento capturados'}
+                      ? 'Ocultar resumo do registro'
+                      : 'Ver resumo do registro'}
                   </button>
 
                   {showPayloadDetails && (
                     <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-white/80 p-2.5 text-[11px] font-mono text-[#111111] border border-black/10">
-                      {JSON.stringify(result.payload, null, 2)}
+                      {JSON.stringify(
+                        result.status === 'error'
+                          ? result.payload
+                          : {
+                              registrationId: result.registrationId,
+                              unitId: result.unit.id,
+                              unidade: result.unit.name,
+                              routingStatus: result.routingStatusLabel,
+                              destinationWhatsapp: result.destinationWhatsapp,
+                              data: result.submittedDate,
+                              horario: result.submittedTime,
+                              cliente: result.payload.nomeCompleto,
+                            },
+                        null,
+                        2
+                      )}
                     </pre>
                   )}
                 </div>

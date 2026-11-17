@@ -20,7 +20,7 @@ import { ResilientImage } from './ResilientImage';
 import { VoucherCtaButton } from './VoucherCtaButton';
 
 interface StoresSectionProps {
-  onSelectStoreForAppointment: (storeName: string) => void;
+  onSelectStoreForAppointment: (storeId: string) => void;
 }
 
 export function StoresSection({
@@ -340,7 +340,7 @@ export function StoresSection({
 
                       <button
                         type="button"
-                        onClick={() => onSelectStoreForAppointment(store.name)}
+                        onClick={() => onSelectStoreForAppointment(store.id)}
                         className="w-full h-9 px-3 rounded-[100px] bg-[#111111] hover:bg-[#18181B] text-[#F5B800] text-xs font-extrabold transition-colors cursor-pointer"
                       >
                         Selecionar esta loja

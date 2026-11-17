@@ -875,6 +875,108 @@ export const OFFICIAL_STORES: StoreUnit[] = [
   },
 ];
 
+export type VoucherDestinationStatus = 'VALIDADO' | 'PENDENTE_VALIDACAO';
+
+export interface VoucherDestinationEntry {
+  unitId: string;
+  unitName: string;
+  whatsappNumber: string | null;
+  status: VoucherDestinationStatus;
+}
+
+export const VOUCHER_ROUTING_MAP: Record<string, VoucherDestinationEntry> = {
+  'filipe-01-heliopolis': {
+    unitId: 'filipe-01-heliopolis',
+    unitName: 'Óticas Filipe — Heliópolis',
+    whatsappNumber: '551122191336',
+    status: 'VALIDADO',
+  },
+  'filipe-02-jardim-fontalis': {
+    unitId: 'filipe-02-jardim-fontalis',
+    unitName: 'Óticas Filipe — Jardim Fontalis',
+    whatsappNumber: '5511951902675',
+    status: 'VALIDADO',
+  },
+  'filipe-03-sitio-piqueri': {
+    unitId: 'filipe-03-sitio-piqueri',
+    unitName: 'Óticas Filipe — Sítio do Piqueri',
+    whatsappNumber: '5511933572711',
+    status: 'VALIDADO',
+  },
+  'filipe-04-sao-caetano': {
+    unitId: 'filipe-04-sao-caetano',
+    unitName: 'Óticas Filipe — São Caetano',
+    whatsappNumber: '5511983488643',
+    status: 'VALIDADO',
+  },
+  'filipe-05-tiradentes': {
+    unitId: 'filipe-05-tiradentes',
+    unitName: 'Óticas Filipe — Tiradentes',
+    whatsappNumber: null,
+    status: 'PENDENTE_VALIDACAO',
+  },
+  'filipe-06-guaianases': {
+    unitId: 'filipe-06-guaianases',
+    unitName: 'Óticas Filipe — Guaianases',
+    whatsappNumber: null,
+    status: 'PENDENTE_VALIDACAO',
+  },
+  'filipe-07-sao-mateus': {
+    unitId: 'filipe-07-sao-mateus',
+    unitName: 'Óticas Filipe — São Mateus',
+    whatsappNumber: null,
+    status: 'PENDENTE_VALIDACAO',
+  },
+  'filipe-08-jardim-santo-andre': {
+    unitId: 'filipe-08-jardim-santo-andre',
+    unitName: 'Óticas Filipe — Jardim Santo André',
+    whatsappNumber: null,
+    status: 'PENDENTE_VALIDACAO',
+  },
+  'filipe-09-rodolfo-pirani': {
+    unitId: 'filipe-09-rodolfo-pirani',
+    unitName: 'Óticas Filipe — Rodolfo Pirani',
+    whatsappNumber: null,
+    status: 'PENDENTE_VALIDACAO',
+  },
+  'filipe-10-metro-belem': {
+    unitId: 'filipe-10-metro-belem',
+    unitName: 'Óticas Filipe — Metrô Belém',
+    whatsappNumber: '5511915272450',
+    status: 'VALIDADO',
+  },
+  'filipe-11-vila-alpina': {
+    unitId: 'filipe-11-vila-alpina',
+    unitName: 'Óticas Filipe — Vila Alpina',
+    whatsappNumber: '5511945360698',
+    status: 'VALIDADO',
+  },
+  'filipe-12-sapopemba': {
+    unitId: 'filipe-12-sapopemba',
+    unitName: 'Óticas Filipe — Sapopemba',
+    whatsappNumber: '5511952095485',
+    status: 'VALIDADO',
+  },
+  'filipe-13-vila-industrial': {
+    unitId: 'filipe-13-vila-industrial',
+    unitName: 'Óticas Filipe — Vila Industrial',
+    whatsappNumber: '5511989465440',
+    status: 'VALIDADO',
+  },
+  'filipe-14-pq-santa-madalena': {
+    unitId: 'filipe-14-pq-santa-madalena',
+    unitName: 'Óticas Filipe — Parque Santa Madalena',
+    whatsappNumber: '5511999997301',
+    status: 'VALIDADO',
+  },
+  'filipe-15-pq-sao-lucas': {
+    unitId: 'filipe-15-pq-sao-lucas',
+    unitName: 'Óticas Filipe — Parque São Lucas',
+    whatsappNumber: '5511982827634',
+    status: 'VALIDADO',
+  },
+};
+
 export const FAQ_ITEMS: FaqItem[] = [
   {
     id: 'faq-1',
